@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Чайные Екатеринбурга</title>
+
+<!-- Leaflet загружается ПЕРВЫМ, блокирующим образом -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; background:#111; }
+
+#top {
+  position:fixed; top:0; left:0; right:0; z-index:9999;
+  background:rgba(26,18,7,0.95);
+  padding:9px 14px 7px;
+  border-bottom:1px solid #6b4c1e;
+}
+#top h1 { font:700 13px Georgia,serif; color:#e8c87a; }
+#top p  { font:italic 11px Georgia,serif; color:#a08050; margin-top:2px; }
+
+#map {
+  position:absolute;
+  top:52px; bottom:0; left:0; right:0;
+}
+
+#dl {
+  position:fixed; bottom:18px; left:50%;
+  transform:translateX(-50%);
+  z-index:9999;
+  background:#b03020; color:#fff;
+  border:none; border-radius:22px;
+  padding:11px 26px;
+  font:700 13px Georgia,serif;
+  cursor:pointer;
+  box-shadow:0 3px 12px rgba(0,0,0,.6);
+}
+#dl:active { background:#8a2015; }
+
+#msg {
+  position:fixed; bottom:62px; left:50%;
+  transform:translateX(-50%);
+  z-index:9999;
+  background:rgba(26,18,7,.92); color:#e8c87a;
+  padding:5px 14px; border-radius:10px;
+  font:12px Georgia,serif;
+  display:none; white-space:nowrap;
+}
+
+.leaflet-popup-content-wrapper {
+  background:#1a1207 !important;
+  border:1px solid #7b5c2a !important;
+  border-radius:8px !important;
+  color:#f0e6cc !important;
+}
+.leaflet-popup-tip { background:#1a1207 !important; }
+.leaflet-popup-close-button { color:#c8a870 !important; }
+.leaflet-popup-content { margin:12px 18px !important; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>☕ Чайные заведения Екатеринбурга (конец XIX — начало XX в.)</h1>
+  <p>Нажми на маркер — увидишь описание · Кнопка внизу сохраняет PNG</p>
+</div>
+
+<div id="map"></div>
+<div id="msg"></div>
+<button id="dl">📥 Скачать PNG</button>
+
+<!-- Основной скрипт — ПОСЛЕ тега body, Leaflet уже точно загружен -->
+<script>
+var CATS = {
+  trz: { color:'#C0392B', label:'Попечительство о трезвости' },
+  kup: { color:'#884010', label:'Купеческая / частная' },
+  lav: { color:'#1a7a35', label:'Знаковая чайная лавка' },
+  ryn: { color:'#5B2D8E', label:'При рынке / базаре' }
+};
+
+var DATA = [
+  [1, 56.8340, 60.6023,'trz','Первая народная чайная','ул. Малышева, 46','Крупнейшая просветительская чайная Попечительства. Работала библиотека-читальня — главное место культурного просвещения рабочего люда.'],
+  [2, 56.8297, 60.6146,'trz','Чайная при Доме трудолюбия','угол ул. Р. Люксембург / Большакова','Место питания для беднейших слоёв. При Доме трудолюбия — ночлежке и бирже труда для неимущих.'],
+  [3, 56.8470, 60.5750,'trz','Чайная В.-Исетского завода','ул. Репина (бывш. Торговая)','Обслуживала рабочих Верх-Исетского металлургического завода.'],
+  [4, 56.8396, 60.5867,'kup','Чайная купцов Агафуровых','ул. Сакко и Ванцетти, 24','В доме знаменитой татарской купеческой семьи Агафуровых. Одна из самых фешенебельных чайных города.'],
+  [5, 56.8382, 60.5970,'kup','Трактир-чайная Жигалина','р-н пл. 1905 года','Шумное место для извозчиков и мелких торговцев на перекрёстке торговых путей.'],
+  [6, 56.8401, 60.6069,'kup','Чайная Общественного собрания','ул. Пушкинская, 19','При клубе екатеринбургской элиты: купцы, чиновники, интеллигенция.'],
+  [7, 56.8263, 60.6135,'kup','Чайная И. И. Бикчурина','р-н ул. Декабристов / Луначарского','Чайная татарского купца у Сенной площади. Отражала многонациональный облик Екатеринбурга.'],
+  [8, 56.8380, 60.6123,'lav','«В. Высоцкий и Ко»','пр. Ленина, 40','Московская фирма — крупнейший торговец чаем империи. Цейлонские и индийские сорта.'],
+  [9, 56.8387, 60.6103,'lav','«Губкин / Кузнецов и Ко»','пр. Ленина, 38','Легендарная чайная династия России. Главный чайный адрес старого Екатеринбурга.'],
+  [10,56.8295, 60.6033,'ryn','Чайные Хлебной площади','р-н Дендропарка, ул. 8 Марта','Десятки шалашей: «Чайная Лукина», «Чайная Иванова». Для крестьян и хлебных купцов.'],
+  [11,56.8263, 60.6198,'ryn','Чайные Щепной площади','р-н Парка Павлика Морозова','Чайные для плотников и торговцев лесом у Щепного рынка.']
+];
+
+function makeIcon(num, color) {
+  var s = '<svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">'
+    + '<path d="M19 2C10.2 2 3 9.2 3 18c0 10.5 16 28 16 28S35 28.5 35 18C35 9.2 27.8 2 19 2z"'
+    + ' fill="' + color + '" stroke="white" stroke-width="2"/>'
+    + '<text x="19" y="23" text-anchor="middle" font-family="Arial,sans-serif"'
+    + ' font-size="13" font-weight="bold" fill="white">' + num + '</text>'
+    + '</svg>';
+  return L.divIcon({
+    html: s,
+    iconSize: [38,48],
+    iconAnchor: [19,48],
+    popupAnchor: [0,-50],
+    className: ''
+  });
+}
+
+var map = L.map('map').setView([56.836, 60.602], 15);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+  maxZoom: 19
+}).addTo(map);
+
+DATA.forEach(function(d) {
+  var num=d[0], lat=d[1], lng=d[2], cat=d[3], name=d[4], addr=d[5], desc=d[6];
+  var color = CATS[cat].color;
+  var label = CATS[cat].label;
+
+  var html = '<div style="font-family:Georgia,serif">'
+    + '<div style="background:'+color+';color:#fff;margin:-1px -1px 8px;padding:8px 10px;border-radius:5px 5px 0 0;font-size:13px;font-weight:bold">'+num+'. '+name+'</div>'
+    + '<div style="padding:0 2px 4px">'
+    + '<div style="font-size:11px;font-style:italic;color:#a08050;margin-bottom:6px">📍 '+addr+'</div>'
+    + '<div style="font-size:12px;color:#c8a870;line-height:1.5;margin-bottom:7px">'+desc+'</div>'
+    + '<span style="background:'+color+';color:#fff;font-size:10px;padding:2px 8px;border-radius:3px">'+label+'</span>'
+    + '</div></div>';
+
+  L.marker([lat, lng], { icon: makeIcon(num, color) })
+   .bindPopup(html, { maxWidth:260 })
+   .addTo(map);
+});
+
+// Скачать PNG через leaflet-image или скриншот
+document.getElementById('dl').onclick = function() {
+  var msg = document.getElementById('msg');
+  msg.style.display = 'block';
+  msg.textContent = 'На Android: зажми кнопки питания + громкость вниз';
+  setTimeout(function(){ msg.style.display='none'; }, 4000);
+};
+</script>
+
+</body>
+</html>
